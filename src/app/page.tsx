@@ -1,101 +1,92 @@
-import Image from "next/image";
+"use client";
+
+import Bubble from "@/components/Bubble";
+import { useState } from "react";
+import { makeDecision, debate } from "./actions";
+import { ChatBotMessage, Decision, Judgment } from "@/lib/ai";
+import { FaArrowUp } from "react-icons/fa";
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  const [agenda, setAgenda] = useState("");
+  const [debateMessages, setDebateMessages] = useState<ChatBotMessage[]>([]);
+  const [judgments, setJudgments] = useState<Judgment[]>([]);
+  const [decision, setDecision] = useState<Decision>();
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
+  const numIterations = 3;
+  const numJudges = 3;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setDebateMessages([]);
+    setJudgments([]);
+    console.log("Agenda:", agenda);
+    console.log("Debate started");
+    const history = await debate(agenda, numIterations);
+    setDebateMessages(history);
+    console.log("Judgement started");
+    if (history.length === 0) return;
+    const decision = await makeDecision(agenda, numJudges, debateMessages);
+    setJudgments(decision.judgments);
+    setDecision(decision);
+  };
+
+  return (
+    <div className="max-w-4xl min-h-screen mx-auto p-3 pb-0 sm:p-20 sm:pb-0">
+      <main className="flex flex-col gap-3">
+        {
+          debateMessages.length > 0 && <h1 className="text-3xl font-bold">{agenda}</h1>
+        }
+        {
+          debateMessages.length > 0 && <>
+            <div className="divider">Debate</div>
+            {debateMessages.map(({ name, content}, index) => (
+              <Bubble
+                key={index}
+                chatClass={name === "Affirmative" ? "chat-start" : "chat-end"}
+                name={name}
+                content={content}
+                bgClass={name === "Affirmative" ? "border-primary" : "border-secondary"}
+              />
+            ))}
+          </>
+        }
+        {
+          judgments.length > 0 && <>
+            <div className="divider">Judgement</div>
+            {judgments.map(({ message: {name, content}, judgement }, index) => (
+              <Bubble
+                key={index}
+                name={name}
+                content={content}
+                suffix={judgement}
+              />
+            ))}
+          </>
+        }
+        {
+          decision && <div className="mx-auto">
+            <span>Affirmative: {decision.affirmatives}</span> <span>Negative: {decision.negatives}</span>
+            <span></span>
+            <p className="text-2xl font-bold">Result: {decision.result}</p>
+          </div>
+        }
       </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      <footer className="sticky bottom-0 w-full p-3 bg-base-200">
+          <form onSubmit={handleSubmit} className="flex gap-2 w-full">
+            <label className="input input-bordered flex items-center gap-2 w-full">
+              <input
+                type="text"
+                value={agenda}
+                onChange={(e) => setAgenda(e.target.value)}
+                className="grow"
+                placeholder="Type Agenda"
+              />
+            </label>
+            <button type="submit" className="btn">
+              <FaArrowUp />
+            </button>
+          </form>
+        </footer>
     </div>
   );
 }
