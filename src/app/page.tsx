@@ -1,9 +1,9 @@
 "use client";
 
 import Bubble from "@/components/Bubble";
-import { useState } from "react";
-import { makeDecision, debate } from "./actions";
-import { ChatBotMessage, Decision, Judgment } from "@/lib/ai";
+import { useEffect, useState } from "react";
+import { debateProgressive, judge, aggregateJudgments } from "./actions";
+import { ChatBotMessage, Decision, History, Judgment } from "@/lib/ai";
 import { FaArrowUp } from "react-icons/fa";
 
 export default function Home() {
@@ -15,20 +15,39 @@ export default function Home() {
   const numIterations = 3;
   const numJudges = 3;
 
+  const scrollToEnd = () => {
+    window.scrollTo({
+      top: document.body.scrollHeight,
+      behavior: "smooth"
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setDebateMessages([]);
     setJudgments([]);
     console.log("Agenda:", agenda);
     console.log("Debate started");
-    const history = await debate(agenda, numIterations);
-    setDebateMessages(history);
+    let history: History = [];
+    for (let i = 0; i < numIterations; i++) {
+      history = await debateProgressive(agenda, history);
+      setDebateMessages(history);
+    }
     console.log("Judgement started");
     if (history.length === 0) return;
-    const decision = await makeDecision(agenda, numJudges, debateMessages);
-    setJudgments(decision.judgments);
+    const judgments: Judgment[] = [];
+    for (let i = 0; i < numJudges; i++) {
+      judgments.push(await judge(agenda, i, history));
+      setJudgments(judgments);
+    }
+    const decision = await aggregateJudgments(judgments);
     setDecision(decision);
   };
+
+  useEffect(() => {
+    if (debateMessages.length === 0 && judgments.length === 0) return;
+    scrollToEnd();
+  }, [debateMessages, judgments, decision]);
 
   return (
     <div className="max-w-4xl min-h-screen mx-auto p-3 pb-0 sm:p-20 sm:pb-0">
@@ -45,7 +64,7 @@ export default function Home() {
                 chatClass={name === "Affirmative" ? "chat-start" : "chat-end"}
                 name={name}
                 content={content}
-                bgClass={name === "Affirmative" ? "border-primary" : "border-secondary"}
+                bgClass={name === "Affirmative" ? "bg-red-200 dark:bg-red-800" : "bg-indigo-200: dark:bg-indigo-800"}
               />
             ))}
           </>
@@ -59,15 +78,19 @@ export default function Home() {
                 name={name}
                 content={content}
                 suffix={judgement}
+                bgClass="bg-emerald-200 dark:bg-emerald-800"
               />
             ))}
           </>
         }
         {
-          decision && <div className="mx-auto">
+          decision && <div className="mx-auto text-center">
             <span>Affirmative: {decision.affirmatives}</span> <span>Negative: {decision.negatives}</span>
-            <span></span>
             <p className="text-2xl font-bold">Result: {decision.result}</p>
+            {
+              decision.hasUnknown &&
+                <p className="italic">⚠️ Failed to obtain one or more judgments.</p>
+            }
           </div>
         }
       </main>

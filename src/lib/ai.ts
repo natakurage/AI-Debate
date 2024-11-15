@@ -26,7 +26,7 @@ export interface Judgment {
 }
 
 export interface Decision {
-  result: "A" | "N" | "U",
+  result: string,
   judgments: Judgment[],
   affirmatives: number,
   negatives: number,
@@ -38,11 +38,13 @@ export type History = ChatBotMessage[]
 export class Chatbot {
   name: string;
   config: ChatbotConfig;
+  system_prompt: string;
   messages: Groq.Chat.Completions.ChatCompletionMessageParam[];
 
   constructor(name: string, system_prompt: string, config: ChatbotConfig) {
     this.name = name;
     this.config = config;
+    this.system_prompt = system_prompt;
     this.messages = [
       {
         role: "system",
@@ -77,27 +79,63 @@ export class Chatbot {
         "content": prompt
     });
   }
+
+  forgetAll() {
+    this.messages = [{
+      "role": "system",
+      "content": this.system_prompt
+    }];
+  }
+
+  loadHistory(history: History) {
+    this.forgetAll();
+    history.forEach((message) => this.messages.push({
+      role: message.name === this.name ? "assistant" : "user",
+      content: message.content
+    }));
+  }
+}
+
+const create_affirmative_bot = (agenda: string, config: ChatbotConfig) => new Chatbot(
+    "Affirmative",
+    `You are positive about the agenda of \"${agenda}\". `
+    + "Summarize the evidence and reasons for affirmation at the beginning, "
+    + "then debate with another bot. "
+    + "Please answer questions succinctly."
+    + `Please answer in ${config.maxWords} words or less.`,
+    config
+);
+
+const create_negative_bot = (agenda: string, config: ChatbotConfig) => new Chatbot(
+    "Negative",
+    `You are negative about the agenda of \"${agenda}\". `
+    + "Summarize the evidence and reasons for negation at the beginning, "
+    + "then debate with another bot. "
+    + "Please answer questions succinctly."
+    + `Please answer in ${config.maxWords} words or less.`,
+    config
+);
+
+const create_judge_bot = (i: number, agenda: string, config: ChatbotConfig) => new Chatbot(
+  `judge${i + 1}`,
+  `You are the judge who will reach a conclusion on the agenda item \"${agenda}\". `
+  + "You must look at the minutes of the proceedings of "
+  + "the affirmative and the negative and make sure that "
+  + "you come to one final conclusion."
+  + "Please answer questions succinctly."
+  + `Please answer in ${config.maxWords} words or less.`
+  + "At the very end, write <j>A</j> if you yourself are positive and <j>N</j> if you are negative.",
+  config
+);
+
+function createProceedings(agenda: string, history: History) {
+  return `Proceedings of the debate on "${agenda}":\n`
+    + history.map((message) => `${message.name}: ${message.content}`).join("\n");
 }
 
 export async function debate(agenda: string, num_iterations: number, config: ChatbotConfig) {
-  const affirmative_bot = new Chatbot(
-      "Affirmative",
-      `You are positive about the agenda of \"${agenda}\". `
-      + "Summarize the evidence and reasons for affirmation at the beginning, "
-      + "then debate with another bot. "
-      + "Please answer questions succinctly."
-      + `Please answer in ${config.maxWords} words or less.`,
-      config
-  );
-  const negative_bot = new Chatbot(
-      "Negative",
-      `You are negative about the agenda of \"${agenda}\". `
-      + "Summarize the evidence and reasons for negation at the beginning, "
-      + "then debate with another bot. "
-      + "Please answer questions succinctly."
-      + `Please answer in ${config.maxWords} words or less.`,
-      config
-  );
+  const affirmative_bot = create_affirmative_bot(agenda, config);
+  const negative_bot = create_negative_bot(agenda, config);
 
   let affirmative_bot_content: string | null = null;
   let negative_bot_content = "(Chairman): Please start the debate.";
@@ -123,60 +161,73 @@ export async function debate(agenda: string, num_iterations: number, config: Cha
   return history;
 }
 
+export async function debateProgressive(agenda: string, history: History, config: ChatbotConfig) {
+  const affirmative_bot = create_affirmative_bot(agenda, config);
+  const negative_bot = create_negative_bot(agenda, config);
+  affirmative_bot.loadHistory(history);
+  negative_bot.loadHistory(history);
+
+  const negative_bot_content = history.length === 0 ? "(Chairman): Please start the debate." : history[history.length - 1].content;
+  const res = await affirmative_bot.chat(negative_bot_content);
+  if (!res.content) {
+    throw new Error("no content");
+  }
+  const affirmative_bot_content = res.content;
+  history.push(res);
+
+  const res2 = await negative_bot.chat(affirmative_bot_content);
+  if (!res2.content) {
+    throw new Error("no content");
+  }
+  history.push(res2);
+  
+  return history;
+}
+
+export async function judge(agenda: string, i: number, history: History, config: ChatbotConfig) {
+  const judge = create_judge_bot(i, agenda, config);
+  const proceedings = createProceedings(agenda, history);
+  const res = await judge.chat(proceedings);
+  if (!res.content) {
+    throw new Error("no content");
+  }
+  try {
+    return {
+      message: {
+        name: res.name,
+        content: res.content.replace(/<j>.*<\/j>/, "")
+      } as ChatBotMessage,
+      judgement: res.content.split("<j>")[1].split("</j>")[0]
+    } as Judgment;
+  } catch { 
+    return {
+      message: {
+        name: res.name,
+        content: res.content.replace(/<j>.*<\/j>/, "")
+      } as ChatBotMessage,
+      judgement: "U"
+    } as Judgment;
+  }
+}
+
+export function aggregateJudgments(judgments: Judgment[]) {
+  const affirmatives = judgments.filter((j) => j.judgement === "A").length;
+  const negatives = judgments.filter((j) => j.judgement === "N").length;
+  const hasUnknown = judgments.some((j) => j.judgement === "U");
+  return {
+    result: affirmatives > negatives ? "Affirmative" : negatives > affirmatives ? "Negative" : "Neutral",
+    judgments,
+    affirmatives,
+    negatives,
+    hasUnknown
+  } as Decision;
+}
+
 export async function makeDecision(
   agenda: string, num_judges: number, history: History, config: ChatbotConfig
 ) {
-  const judges = Array.from({ length: num_judges }, (_, i) =>
-      new Chatbot(
-          `judge${i + 1}`,
-          `You are the judge who will reach a conclusion on the agenda item \"${agenda}\". `
-          + "You must look at the minutes of the proceedings of "
-          + "the affirmative and the negative and make sure that "
-          + "you come to one final conclusion."
-          + "Please answer questions succinctly."
-          + `Please answer in ${config.maxWords} words or less.`
-          + "At the very end, write <j>A</j> if you yourself are positive and <j>N</j> if you are negative.",
-          config
-      )
-  );
-  const proceedings = `Proceedings of the debate on "${agenda}":\n`
-    + history.map((message) => `${message.name}: ${message.content}`).join("\n");
-  const judgments = await Promise.all(judges.map(async (judge) => {
-    const res = await judge.chat(proceedings);
-    if (!res.content) {
-      throw new Error("no content");
-    }
-    try {
-      return {
-        message: {
-          name: res.name,
-          content: res.content.replace(/<j>.*<\/j>/, "")
-        } as ChatBotMessage,
-        judgement: res.content.split("<j>")[1].split("</j>")[0]
-      } as Judgment;
-    } catch {
-      return {
-        message: {
-          name: res.name,
-          content: res.content.replace(/<j>.*<\/j>/, "")
-        } as ChatBotMessage,
-        judgement: "U"
-      } as Judgment;
-    }
-  }));
-  const num_As = judgments.filter((j) => j.judgement === "A").length;
-  const num_Ns = judgments.filter((j) => j.judgement === "N").length;
-  
-  let result = "Neutral";
-  if (num_As > num_Ns)
-    result = "Affirmative";
-  else
-    result = "Negative";
-  return {
-    result,
-    judgments,
-    affirmatives: num_As,
-    negatives: num_Ns,
-    hasUnknown: num_judges - (num_As + num_Ns) > 0
-  } as Decision;
+  const judgments = await Promise.all(Array.from({ length: num_judges }, (_, i) =>
+    judge(agenda, i, history, config)
+  ));
+  return aggregateJudgments(judgments);
 }
