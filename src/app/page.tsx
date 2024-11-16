@@ -34,11 +34,12 @@ export default function Home() {
       setDebateMessages(history);
     }
     console.log("Judgement started");
-    const _judgments = await Promise.all(
-      Array.from({ length: numJudges }, (_, i) => 
-        judge(agenda, i, history)
-    ));
-    setJudgments(_judgments);
+    const _judgments: Judgment[] = [];
+    for (let i = 0; i < numJudges; i++) {
+      const newJudgment = await judge(agenda, i, history);
+      _judgments.push(newJudgment);
+      setJudgments(_judgments);
+    }
     const decision = await aggregateJudgments(_judgments);
     setDecision(decision);
   };
