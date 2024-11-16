@@ -17,7 +17,9 @@ export const commonConfig: ChatbotConfig = {
 
 export interface ChatBotMessage {
   name: string,
-  content: string
+  content: string,
+  duration?: number,
+  tokens?: number
 }
 
 export interface Judgment {
@@ -69,7 +71,9 @@ export class Chatbot {
     this.messages.push(message);
     return {
       name: this.name,
-      content: message.content
+      content: message.content,
+      duration: res.usage?.completion_time,
+      tokens: res.usage?.completion_tokens
     } as ChatBotMessage;
   }
   
@@ -143,19 +147,19 @@ export async function debate(agenda: string, num_iterations: number, config: Cha
   const history: History = [];
 
   for (let i = 0; i < num_iterations; i++) {
-      const res = await affirmative_bot.chat(negative_bot_content);
-      if (!res.content) {
+      const message = await affirmative_bot.chat(negative_bot_content);
+      if (!message.content) {
         throw new Error("no content");
       }
-      affirmative_bot_content = res.content;
-      history.push(res);
+      affirmative_bot_content = message.content;
+      history.push(message);
 
-      const res2 = await negative_bot.chat(affirmative_bot_content);
-      if (!res2.content) {
+      const message2 = await negative_bot.chat(affirmative_bot_content);
+      if (!message2.content) {
         throw new Error("no content");
       }
-      negative_bot_content = res2.content;
-      history.push(res2);
+      negative_bot_content = message2.content;
+      history.push(message2);
   }
 
   return history;
@@ -168,18 +172,18 @@ export async function debateProgressive(agenda: string, history: History, config
   negative_bot.loadHistory(history);
 
   const negative_bot_content = history.length === 0 ? "(Chairman): Please start the debate." : history[history.length - 1].content;
-  const res = await affirmative_bot.chat(negative_bot_content);
-  if (!res.content) {
+  const message = await affirmative_bot.chat(negative_bot_content);
+  if (!message.content) {
     throw new Error("no content");
   }
-  const affirmative_bot_content = res.content;
-  history.push(res);
+  const affirmative_bot_content = message.content;
+  history.push(message);
 
-  const res2 = await negative_bot.chat(affirmative_bot_content);
-  if (!res2.content) {
+  const message2 = await negative_bot.chat(affirmative_bot_content);
+  if (!message2.content) {
     throw new Error("no content");
   }
-  history.push(res2);
+  history.push(message2);
   
   return history;
 }
@@ -187,23 +191,23 @@ export async function debateProgressive(agenda: string, history: History, config
 export async function judge(agenda: string, i: number, history: History, config: ChatbotConfig) {
   const judge = create_judge_bot(i, agenda, config);
   const proceedings = createProceedings(agenda, history);
-  const res = await judge.chat(proceedings);
-  if (!res.content) {
+  const message = await judge.chat(proceedings);
+  if (!message.content) {
     throw new Error("no content");
   }
   try {
     return {
       message: {
-        name: res.name,
-        content: res.content.replace(/<j>.*<\/j>/, "")
+        ...message,
+        content: message.content.replace(/<j>.*<\/j>/, "")
       } as ChatBotMessage,
-      judgement: res.content.split("<j>")[1].split("</j>")[0]
+      judgement: message.content.split("<j>")[1].split("</j>")[0]
     } as Judgment;
   } catch { 
     return {
       message: {
-        name: res.name,
-        content: res.content.replace(/<j>.*<\/j>/, "")
+        ...message,
+        content: message.content.replace(/<j>.*<\/j>/, "")
       } as ChatBotMessage,
       judgement: "U"
     } as Judgment;

@@ -59,12 +59,13 @@ export default function Home() {
         {
           debateMessages.length > 0 && <>
             <div className="divider">Debate</div>
-            {debateMessages.map(({ name, content}, index) => (
+            {debateMessages.map(({ name, content, duration, tokens }, index) => (
               <Bubble
                 key={index}
                 chatClass={name === "Affirmative" ? "chat-start" : "chat-end"}
                 name={name}
                 content={content}
+                footer={`${tokens} tokens, ${Math.round((duration ?? 0) * 1000)} ms`}
                 bgClass={name === "Affirmative" ? "bg-red-200 dark:bg-red-800" : "bg-indigo-200 dark:bg-indigo-800"}
               />
             ))}
@@ -73,12 +74,13 @@ export default function Home() {
         {
           judgments.length > 0 && <>
             <div className="divider">Judgement</div>
-            {judgments.map(({ message: {name, content}, judgement }, index) => (
+            {judgments.map(({ message: { name, content, duration, tokens }, judgement }, index) => (
               <Bubble
                 key={index}
                 name={name}
                 content={content}
                 suffix={judgement}
+                footer={`${tokens} tokens, ${Math.round((duration ?? 0) * 1000)} ms`}
                 bgClass="bg-emerald-200 dark:bg-emerald-800"
               />
             ))}
