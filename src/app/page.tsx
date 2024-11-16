@@ -64,7 +64,7 @@ export default function Home() {
                 chatClass={name === "Affirmative" ? "chat-start" : "chat-end"}
                 name={name}
                 content={content}
-                bgClass={name === "Affirmative" ? "bg-red-200 dark:bg-red-800" : "bg-indigo-200: dark:bg-indigo-800"}
+                bgClass={name === "Affirmative" ? "bg-red-200 dark:bg-red-800" : "bg-indigo-200 dark:bg-indigo-800"}
               />
             ))}
           </>
