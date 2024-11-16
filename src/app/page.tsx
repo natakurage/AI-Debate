@@ -26,6 +26,7 @@ export default function Home() {
     e.preventDefault();
     setDebateMessages([]);
     setJudgments([]);
+    setDecision(undefined);
     console.log("Agenda:", agenda);
     console.log("Debate started");
     let history: History = [];
