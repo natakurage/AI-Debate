@@ -32,5 +32,5 @@ export async function judge(agenda: string, i: number, history: History) {
 }
 
 export async function aggregateJudgments(judgments: Judgment[]) {
-  return await _aggregateJudgments(judgments);
+  return _aggregateJudgments(judgments);
 }

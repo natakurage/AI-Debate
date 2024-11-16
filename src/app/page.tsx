@@ -34,11 +34,9 @@ export default function Home() {
       setDebateMessages(history);
     }
     console.log("Judgement started");
-    if (history.length === 0) return;
-    const judgments: Judgment[] = [];
     for (let i = 0; i < numJudges; i++) {
-      judgments.push(await judge(agenda, i, history));
-      setJudgments(judgments);
+      const newJudgment = await judge(agenda, i, history);
+      setJudgments([...judgments, newJudgment]);
     }
     const decision = await aggregateJudgments(judgments);
     setDecision(decision);
