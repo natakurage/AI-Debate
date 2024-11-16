@@ -39,7 +39,7 @@ export default function Home() {
     for (let i = 0; i < numJudges; i++) {
       const newJudgment = await judge(agenda, i, history);
       _judgments.push(newJudgment);
-      setJudgments(_judgments);
+      setJudgments(j => [...j, newJudgment]);
     }
     const decision = await aggregateJudgments(_judgments);
     setDecision(decision);
